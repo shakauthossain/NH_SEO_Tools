@@ -49,6 +49,42 @@ def admin_create_user(email: str, password: str, db: Session = Depends(get_db), 
     db.commit()
     return {"message": f"User {email} created successfully by admin {admin_username}"}
 
+@app.get("/admin/users")
+def admin_list_users(db: Session = Depends(get_db), admin_username: str = Depends(get_super_admin)):
+    users = db.query(User).all()
+    result = []
+    for u in users:
+        audit_count = db.query(Audit).filter(Audit.user_id == u.id).count()
+        result.append({
+            "id": u.id,
+            "email": u.email,
+            "audit_count": audit_count,
+        })
+    return result
+
+@app.delete("/admin/users/{user_id}")
+def admin_delete_user(user_id: int, db: Session = Depends(get_db), admin_username: str = Depends(get_super_admin)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Delete user's audits first
+    db.query(Audit).filter(Audit.user_id == user_id).delete()
+    db.query(BulkJob).filter(BulkJob.user_id == user_id).delete()
+    db.delete(user)
+    db.commit()
+    return {"message": f"User {user.email} deleted successfully"}
+
+@app.get("/admin/stats")
+def admin_stats(db: Session = Depends(get_db), admin_username: str = Depends(get_super_admin)):
+    total_users = db.query(User).count()
+    total_audits = db.query(Audit).count()
+    total_jobs = db.query(BulkJob).count()
+    return {
+        "total_users": total_users,
+        "total_audits": total_audits,
+        "total_bulk_jobs": total_jobs,
+    }
+
 @app.post("/token")
 def login(email: str, password: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == email).first()

@@ -1,0 +1,7 @@
+.git/
+.github/
+backend/reports/
+**/node_modules/
+backend/Dockerfile
+frontend/Dockerfile
+docker-compose.yml
