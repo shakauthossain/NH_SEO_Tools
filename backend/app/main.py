@@ -37,19 +37,44 @@ from sqlalchemy.orm import Session
 # Initialize Database
 Base.metadata.create_all(bind=engine)
 
+# Ensure Database schema is up-to-date (Migration)
+with engine.connect() as conn:
+    try:
+        from sqlalchemy import text
+        # Migration for BulkJob
+        conn.execute(text("ALTER TABLE bulk_jobs ADD COLUMN IF NOT EXISTS total_count INTEGER DEFAULT 0;"))
+        conn.execute(text("ALTER TABLE bulk_jobs ADD COLUMN IF NOT EXISTS processed_count INTEGER DEFAULT 0;"))
+        
+        # Migration for Audit (Legacy/Missing full_results)
+        conn.execute(text("ALTER TABLE audits ADD COLUMN IF NOT EXISTS full_results JSONB;"))
+        
+        conn.commit()
+        print("--- SUCCESS: Database migrations completed ---")
+    except Exception as e:
+        print(f"--- WARNING: Migration check failed: {e} ---")
+
 app = FastAPI(title="SEO & Speed Analysis API (Enterprise)")
 
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://seo-tool.riseo.online",
+        "http://seo-tool.riseo.online",
+        "http://localhost:3000",
+        "http://localhost:3003",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 REPORTS_DIR = os.path.join(os.getcwd(), "reports")
 os.makedirs(REPORTS_DIR, exist_ok=True)
-PAGESPEED_API_KEY = os.getenv("PAGESPEED_API_KEY", "")
+PAGESPEED_API_KEY = os.getenv("PAGESPEED_API_KEY")
+BASE_URL = os.getenv("BASE_URL")
+if BASE_URL:
+    BASE_URL = BASE_URL.rstrip("/")
 
 # --- AUTH ROUTES ---
 
@@ -236,11 +261,28 @@ async def analyze_website(
     # 2. Speed Analysis
     speed_data = {}
     if report_type in [ReportType.SPEED, ReportType.BOTH]:
-        print(f"--- INFO: Fetching Speed data for {url} ---")
-        raw_speed = fetch_pagespeed_data_sync(url, PAGESPEED_API_KEY)
-        if raw_speed:
+        print(f"--- INFO: Fetching Speed data (Mobile & Desktop) for {url} ---")
+        
+        # Fetch both in parallel
+        mobile_task = asyncio.to_thread(fetch_pagespeed_data_sync, url, PAGESPEED_API_KEY, "mobile")
+        desktop_task = asyncio.to_thread(fetch_pagespeed_data_sync, url, PAGESPEED_API_KEY, "desktop")
+        raw_mobile, raw_desktop = await asyncio.gather(mobile_task, desktop_task)
+
+        if raw_mobile or raw_desktop:
             print(f"--- SUCCESS: Speed data fetched for {url} ---")
-            speed_data = parse_pagespeed_data(raw_speed, url, "mobile")
+            
+            # Parse both
+            mob_res = parse_pagespeed_data(raw_mobile, url, "mobile") if raw_mobile else {}
+            dsk_res = parse_pagespeed_data(raw_desktop, url, "desktop") if raw_desktop else {}
+            
+            # Combine into a unified structure
+            speed_data = {
+                "mobile": mob_res,
+                "desktop": dsk_res,
+                "perf_score": mob_res.get("perf_score", "N/A"), # Default fallback
+                "perf_score_desktop": dsk_res.get("perf_score", "N/A")
+            }
+            
             html = gen_speed_html(speed_data)
             with open(
                 os.path.join(REPORTS_DIR, f"{report_id}_speed.html"),
@@ -301,8 +343,8 @@ async def analyze_website(
             },
             "speed_tests": speed_tests,
         },
-        "seo_report_url": f"/reports/{report_id}_seo.html",
-        "speed_report_url": f"/reports/{report_id}_speed.html",
+        "seo_report_url": f"{BASE_URL}/reports/{report_id}_seo.html",
+        "speed_report_url": f"{BASE_URL}/reports/{report_id}_speed.html",
     }
 
 
@@ -350,12 +392,12 @@ def get_audit(report_id: str, db: Session = Depends(get_db)):
             "metrics": speed_metrics,
             "speed_tests": speed_tests,
         },
-        "seo_report_url": f"/reports/{report_id}_seo.html",
-        "speed_report_url": f"/reports/{report_id}_speed.html",
+        "seo_report_url": f"{BASE_URL}/reports/{report_id}_seo.html",
+        "speed_report_url": f"{BASE_URL}/reports/{report_id}_speed.html",
     }
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8003)

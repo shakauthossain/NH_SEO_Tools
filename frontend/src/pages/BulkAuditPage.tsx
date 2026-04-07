@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { API_BASE_URL as API_URL } from "../api";
 import { motion } from "framer-motion";
 import {
   FileUp,
@@ -144,15 +144,19 @@ export default function BulkAuditPage({
               <div className="flex justify-between text-xs font-bold uppercase text-text-muted mb-2">
                 <span>Progress</span>
                 <span>
-                  {bulkStatus?.status === "completed" ? "100" : "50"}%
+                  {bulkStatus?.status === "completed" 
+                    ? "100" 
+                    : Math.round(((bulkStatus?.processed_count || 0) / (bulkStatus?.total_count || 1)) * 100)}%
                 </span>
               </div>
-              <div className="relative w-full h-3 bg-bg-main border border-border-subtle rounded-full overflow-hidden shadow-inner mb-8">
+              <div className="relative w-full h-3 bg-bg-main border border-border-subtle rounded-full overflow-hidden shadow-inner mb-4">
                 <motion.div
                   className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-accent/80 to-accent"
                   initial={{ width: "5%" }}
                   animate={{
-                    width: bulkStatus?.status === "completed" ? "100%" : "50%",
+                    width: bulkStatus?.status === "completed" 
+                      ? "100%" 
+                      : `${Math.max(5, ((bulkStatus?.processed_count || 0) / (bulkStatus?.total_count || 1)) * 100)}%`,
                   }}
                   transition={{ duration: 0.8, ease: "easeInOut" }}
                 />
@@ -168,6 +172,11 @@ export default function BulkAuditPage({
                     }}
                   />
                 )}
+              </div>
+              
+              {/* Processed Count indicator */}
+              <div className="text-center text-xs font-bold text-text-muted mb-8 tracking-widest uppercase opacity-70">
+                {bulkStatus?.processed_count || 0} / {bulkStatus?.total_count || 0} Leads Completed
               </div>
             </div>
 

@@ -40,6 +40,8 @@ class BulkJob(Base):
     input_filename = Column(String, nullable=False)
     output_filename = Column(String, nullable=True)
     status = Column(String, default="pending")
+    total_count = Column(Integer, default=0)
+    processed_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     owner = relationship("User", back_populates="jobs")

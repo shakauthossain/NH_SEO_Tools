@@ -19,6 +19,7 @@ import AnalyzePage from "./pages/AnalyzePage";
 import type { AnalysisType, Status } from "./pages/AnalyzePage";
 
 const PROGRESS_STEP_COUNT = 5;
+const APP_TITLE = import.meta.env.VITE_APP_TITLE || "NH SEO Tools";
 
 export default function App() {
   const navigate = useNavigate();
@@ -133,7 +134,7 @@ export default function App() {
     setViewingDetails(null);
     setActiveStep(0);
     setAuditData(null);
-    document.title = "Antigravity SEO";
+    document.title = APP_TITLE;
   };
 
   const reset = () => {
@@ -164,7 +165,7 @@ export default function App() {
               <Activity className="w-5 h-5 text-accent-fg" />
             </div>
             <h1 className="text-lg font-semibold tracking-tight">
-              Antigravity SEO
+              {APP_TITLE}
             </h1>
           </div>
 
@@ -239,7 +240,7 @@ export default function App() {
           <AnimatePresence mode="wait">
             <Routes
               location={location}
-              {...({ key: location.pathname.split("/")[1] || "/" } as any)}
+              key={location.pathname.split("/")[1] || "/"}
             >
               <Route path="/admin" element={<AdminPage />} />
 

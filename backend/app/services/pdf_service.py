@@ -18,6 +18,7 @@ async def generate_pdf(html_content: str, output_path: str):
             format="A4",
             print_background=True,
             margin={"top": "0cm", "bottom": "0cm", "left": "0cm", "right": "0cm"},
-            prefer_css_page_size=True
+            prefer_css_page_size=True,
+            landscape=True
         )
         await browser.close()

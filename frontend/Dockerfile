@@ -12,7 +12,7 @@ RUN npm install
 COPY . .
 
 # Expose Vite development port (aligned with package.json)
-EXPOSE 3000
+EXPOSE 3003
 
 # Run Vite in development mode with --host flag
 # This allows the container's port to be accessed by the host machine

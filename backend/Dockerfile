@@ -24,7 +24,7 @@ COPY . .
 RUN mkdir -p reports
 
 # Expose backend port
-EXPOSE 8000
+EXPOSE 8003
 
 # Run FastAPI with uvicorn
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8003", "--reload"]

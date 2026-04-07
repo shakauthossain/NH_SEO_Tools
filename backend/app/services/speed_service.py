@@ -12,7 +12,7 @@ def fetch_pagespeed_data_sync(url: str, api_key: str, strategy: str = "mobile"):
         "strategy": strategy,
         "category": ["performance"],
     }
-    resp = requests.get(endpoint, params=params, timeout=60)
+    resp = requests.get(endpoint, params=params, timeout=120)
     if resp.status_code != 200:
         print(f"--- ERROR: PageSpeed API {resp.status_code} for {url} ---")
         print(f"--- DETAIL: {resp.text[:200]} ---")
@@ -170,533 +170,425 @@ def parse_pagespeed_data(raw: dict, url: str, strategy: str):
 
 
 def generate_html(data: dict) -> str:
-    """Generates a premium slide-deck HTML report for Speed data."""
+    """Generates a premium dual-strategy slide-deck HTML report for Speed data."""
     try:
+        # Extract mobile/desktop data
+        m = data.get("mobile", {})
+        d = data.get("desktop", {})
+
         # ── Inline helpers ────────────────────────────────────────────────────
         def score_color(s):
             try:
                 v = int(s)
-                if v >= 90:
-                    return "#16a34a"
-                if v >= 50:
-                    return "#d97706"
-                return "#dc2626"
-            except:
-                return "#6b7280"
-
-        def score_verdict(s):
-            try:
-                v = int(s)
-                if v >= 90:
-                    return (
-                        "Lightning Fast",
-                        "Excellent speed. Your visitors get a smooth, instant-feeling experience.",
-                    )
-                if v >= 70:
-                    return (
-                        "Pretty Good",
-                        "Good performance overall, but there is still room to improve load times.",
-                    )
-                if v >= 50:
-                    return (
-                        "Needs Work",
-                        "Several performance issues are slowing your site down and hurting user experience.",
-                    )
-                return (
-                    "Very Slow",
-                    "Significant performance problems. This is likely costing you visitors and search rankings.",
-                )
-            except:
-                return ("Unknown", "We couldn't determine your speed score.")
+                if v >= 90: return "#22c55e" # Green
+                if v > 50: return "#f59e0b"  # Yellowish/Amber (51-89)
+                return "#ef4444"             # Red (0-50)
+            except: return "#6b7280"
 
         def grade(s):
             try:
                 v = int(s)
-                if v >= 90:
-                    return "A"
-                if v >= 70:
-                    return "B"
-                if v >= 50:
-                    return "C"
-                if v >= 30:
-                    return "D"
+                if v >= 90: return "A"
+                if v >= 70: return "B"
+                if v >= 50: return "C"
+                if v >= 30: return "D"
                 return "F"
-            except:
-                return "?"
-
-        def metric_color(st):
-            return {"pass": "#16a34a", "warning": "#d97706", "fail": "#dc2626"}.get(
-                st, "#6b7280"
-            )
-
-        def metric_bg(st):
-            return {"pass": "#f0fdf4", "warning": "#fffbeb", "fail": "#fef2f2"}.get(
-                st, "#f9fafb"
-            )
-
-        def metric_border(st):
-            return {"pass": "#bbf7d0", "warning": "#fde68a", "fail": "#fecaca"}.get(
-                st, "#e5e7eb"
-            )
-
-        def metric_label(st):
-            return {
-                "pass": "Fast ✅",
-                "warning": "Needs Work ⚠️",
-                "fail": "Slow ❌",
-            }.get(st, "N/A")
-
-        def ring_dash(s):
-            try:
-                return round(3.14159 * 2 * 54 * int(s) / 100, 1)
-            except:
-                return 0
+            except: return "?"
 
         def status_meta(st):
-            if st == "pass":
-                return ("✅", "Good", "#16a34a", "#f0fdf4", "#bbf7d0")
-            if st == "warning":
-                return ("⚠️", "Fix It", "#d97706", "#fffbeb", "#fde68a")
-            if st == "fail":
-                return ("❌", "Problem", "#dc2626", "#fef2f2", "#fecaca")
-            return ("ℹ️", "Info", "#2563eb", "#eff6ff", "#bfdbfe")
+            if st == "pass": return ("✅", "Good", "#15803d", "bd-g")
+            if st == "warning": return ("⚠️", "Warn", "#d97706", "bd-y")
+            if st == "fail": return ("❌", "Fix", "#dc2626", "bd-r")
+            return ("ℹ️", "Info", "#1d4ed8", "bd-b")
 
-        # ── Derived values ────────────────────────────────────────────────────
-        domain = data["url"].replace("https://", "").replace("http://", "").rstrip("/")
-        pc = score_color(data["perf_score"])
-        verdict, verdict_desc = score_verdict(data["perf_score"])
-        pg = grade(data["perf_score"])
-        total_slides = 2 + len(data["categories"]) + 1
-        speed_bar_w = data["perf_score"] if data["perf_score"] != "N/A" else 0
-        rd = ring_dash(data["perf_score"])
-        strategy_tag = "📱 Mobile" if data["strategy"] == "mobile" else "🖥️ Desktop"
-
-        lcp_c = metric_color(data["lcp_status"])
-        tbt_c = metric_color(data["tbt_status"])
-        cls_c = metric_color(data["cls_status"])
-        fcp_c = metric_color(data["fcp_status"])
-
-        # ── Core Web Vitals cards ─────────────────────────────────────────────
-        cwv_items = [
-            {
-                "abbr": "LCP",
-                "name": "Largest Contentful Paint",
-                "val": data["lcp"],
-                "status": data["lcp_status"],
-                "desc": "How long until the main content (hero image or big text) appears on screen.",
-                "scale": "✅ Under 2.5s  ·  ⚠️ Under 4s  ·  ❌ Over 4s",
-                "why": "Visitors decide to stay or leave within seconds of arriving.",
-            },
-            {
-                "abbr": "TBT",
-                "name": "Total Blocking Time",
-                "val": data["tbt"],
-                "status": data["tbt_status"],
-                "desc": "How long your page freezes and ignores clicks while it loads.",
-                "scale": "✅ Under 200ms  ·  ⚠️ Under 600ms  ·  ❌ Over 600ms",
-                "why": "A frozen page feels broken to visitors — they'll click away.",
-            },
-            {
-                "abbr": "CLS",
-                "name": "Cumulative Layout Shift",
-                "val": data["cls"],
-                "status": data["cls_status"],
-                "desc": "How much the page content jumps around while it loads.",
-                "scale": "✅ Under 0.1  ·  ⚠️ Under 0.25  ·  ❌ Over 0.25",
-                "why": "Layout jumps cause accidental clicks and a frustrating experience.",
-            },
-            {
-                "abbr": "FCP",
-                "name": "First Contentful Paint",
-                "val": data["fcp"],
-                "status": data["fcp_status"],
-                "desc": "When the very first thing appears on screen — text, image, or logo.",
-                "scale": "✅ Under 1.8s  ·  ⚠️ Under 3s  ·  ❌ Over 3s",
-                "why": "A blank white screen for too long signals a slow or broken site.",
-            },
-            {
-                "abbr": "SI",
-                "name": "Speed Index",
-                "val": data["si"],
-                "status": data["si_status"],
-                "desc": "How quickly the visible parts of the page fill in as it loads.",
-                "scale": "✅ Under 3.4s  ·  ⚠️ Under 5.8s  ·  ❌ Over 5.8s",
-                "why": "A page that fills in gradually feels faster than one that appears all at once late.",
-            },
-            {
-                "abbr": "TTI",
-                "name": "Time to Interactive",
-                "val": data["tti"],
-                "status": data["tti_status"],
-                "desc": "How long until visitors can fully click, scroll, and use the page.",
-                "scale": "✅ Under 3.8s  ·  ⚠️ Under 7.3s  ·  ❌ Over 7.3s",
-                "why": "Even if the page looks loaded, it may still be unresponsive.",
-            },
-        ]
-
-        cwv_cards_html = ""
-        for m in cwv_items:
-            clr = metric_color(m["status"])
-            bg = metric_bg(m["status"])
-            brd = metric_border(m["status"])
-            lbl = metric_label(m["status"])
-            cwv_cards_html += f"""
-        <div class="cwv-card" style="background:{bg};border-color:{brd};">
-          <div class="cwv-top">
-            <div>
-              <div class="cwv-abbr" style="color:{clr};">{m["abbr"]}</div>
-              <div class="cwv-name">{m["name"]}</div>
-            </div>
-            <div class="cwv-val" style="color:{clr};">{m["val"]}</div>
-          </div>
-          <div class="cwv-desc">{m["desc"]}</div>
-          <div class="cwv-why">💡 {m["why"]}</div>
-          <div class="cwv-footer">
-            <span class="cwv-badge" style="background:{clr};">{lbl}</span>
-            <span class="cwv-scale">{m["scale"]}</span>
-          </div>
-        </div>"""
-
-        # ── Category slides ───────────────────────────────────────────────────
-        category_slides = ""
-        for idx, cat in enumerate(data["categories"]):
-            slide_num = idx + 3
-            pass_c = sum(1 for i in cat["items"] if i["status"] == "pass")
-            warn_c = sum(1 for i in cat["items"] if i["status"] == "warning")
-            fail_c = sum(1 for i in cat["items"] if i["status"] == "fail")
-            info_c = sum(1 for i in cat["items"] if i["status"] == "info")
-
-            items_html = ""
-            for item in cat["items"]:
-                emoji, label, clr, bg, border = status_meta(item["status"])
-                safe = item["content"].replace("<", "&lt;").replace(">", "&gt;")
-                items_html += f"""
-            <div class="check-card" style="background:{bg};border-color:{border};">
-              <div class="check-card-top">
-                <span class="check-emoji">{emoji}</span>
-                <div class="check-info">
-                  <div class="check-title">{item["title"]}</div>
-                  <div class="check-desc">{safe}</div>
+        def get_gauge_html(score, label, color):
+            try:
+                val = int(score) if score != "N/A" else 0
+            except:
+                val = 0
+            offset = 251.2 * (1 - val / 100)
+            return f"""
+            <div class="gauge-item">
+              <div class="gauge-label">{label}</div>
+              <div class="gauge-visual">
+                <svg class="gauge-svg" viewBox="0 0 100 100">
+                  <circle class="gauge-bg" cx="50" cy="50" r="40" />
+                  <circle class="gauge-fill" cx="50" cy="50" r="40" stroke="{color}" 
+                    stroke-dasharray="251.2" stroke-dashoffset="{offset}" />
+                </svg>
+                <div class="gauge-center">
+                  <span class="gauge-val" style="color:{color}">{score}</span>
                 </div>
-                <span class="check-badge" style="background:{clr};">{label}</span>
               </div>
             </div>"""
 
-            info_pill = (
-                f'<span class="mini-pill blue">ℹ {info_c} Info</span>' if info_c else ""
-            )
+        # ── Derived values ────────────────────────────────────────────────────
+        url = m.get("url") or d.get("url") or "unknown"
+        domain = url.replace("https://", "").replace("http://", "").rstrip("/")
+        timestamp = m.get("timestamp") or d.get("timestamp") or datetime.now().strftime("%B %d, %Y")
+        
+        m_score = m.get("perf_score", "N/A")
+        d_score = d.get("perf_score", "N/A")
+        
+        m_color = score_color(m_score)
+        d_color = score_color(d_score)
+        
+        m_grade = grade(m_score)
+        d_grade = grade(d_score)
+
+        num_cats = len(m.get("categories", []))
+        total_slides = 2 + num_cats + 1
+        total_slides_str = str(total_slides).zfill(2)
+
+        # ── Dashboard Metrics Table ──────────────────────────────────────────
+        def get_metric_row(label, key_m, key_d, desc):
+            val_m = m.get(key_m, "N/A")
+            val_d = d.get(key_d, "N/A")
+            st_m = m.get(key_m + "_status", "info")
+            st_d = d.get(key_d + "_status", "info")
+            
+            clr_m = "#16a34a" if st_m == "pass" else "#d97706" if st_m == "warning" else "#dc2626"
+            clr_d = "#16a34a" if st_d == "pass" else "#d97706" if st_d == "warning" else "#dc2626"
+            
+            return f"""
+            <tr>
+              <td><strong>{label}</strong><br><small>{desc}</small></td>
+              <td style="color:{clr_m}; font-weight:800;">{val_m}</td>
+              <td style="color:{clr_d}; font-weight:800;">{val_d}</td>
+            </tr>"""
+
+        metrics_html = (
+            get_metric_row("LCP", "lcp", "lcp", "Largest Contentful Paint (Visual Load)") +
+            get_metric_row("TBT", "tbt", "tbt", "Total Blocking Time (Interactivity)") +
+            get_metric_row("CLS", "cls", "cls", "Cumulative Layout Shift (Stability)") +
+            get_metric_row("FCP", "fcp", "fcp", "First Contentful Paint") +
+            get_metric_row("SI", "si", "si", "Speed Index") +
+            get_metric_row("TTI", "tti", "tti", "Time to Interactive")
+        )
+
+        # ── Category slides ───────────────────────────────────────────────────
+        category_slides = ""
+        m_cats = m.get("categories", [])
+        d_cats = d.get("categories", [])
+        
+        for idx in range(num_cats):
+            m_cat = m_cats[idx]
+            d_cat = d_cats[idx] if idx < len(d_cats) else {}
+            
+            slide_num = str(idx + 3).zfill(2)
+            
+            # Combine opportunities - if it fails in either, show it
+            items_html = ""
+            # We'll use mobile items as primary list
+            for i_idx, m_item in enumerate(m_cat.get("items", [])):
+                d_item = d_cat.get("items", [{}])[i_idx] if i_idx < len(d_cat.get("items", [])) else {}
+                
+                # Pick worst status
+                status = m_item["status"]
+                if d_item.get("status") == "fail": status = "fail"
+                elif d_item.get("status") == "warning" and status == "pass": status = "warning"
+                
+                emoji, label, clr, bdg_cls = status_meta(status)
+                safe_content = m_item.get("content", "")[:260].replace("<", "&lt;").replace(">", "&gt;")
+                
+                # Annotate if platform specific
+                platform_note = ""
+                if m_item["status"] != d_item.get("status"):
+                    if m_item["status"] == "fail": platform_note = '<span style="color:#dc2626; font-size:9px; font-weight:800;">⚠️ MOBILE ISSUE</span>'
+                    if d_item.get("status") == "fail": platform_note = '<span style="color:#dc2626; font-size:9px; font-weight:800;">🖥️ DESKTOP ISSUE</span>'
+
+                items_html += f"""
+            <div class="ci">
+              <span class="cico">{emoji}</span>
+              <div class="ctx">
+                <h4>{m_item["title"]}</h4>
+                <p>{safe_content}</p>
+                {platform_note}
+              </div>
+              <span class="cbdg {bdg_cls}">{label}</span>
+            </div>"""
+
             category_slides += f"""
-        <div class="slide" data-slide="{slide_num}">
-          <div class="slide-inner">
-            <div class="cat-header">
-              <div class="cat-icon">{cat["icon"]}</div>
-              <div>
-                <div class="cat-title">{cat["name"]}</div>
-                <div class="cat-tagline">{cat["tagline"]}</div>
+        <div class="slide">
+          <div class="slide-sidebar spd-sb">
+            <div class="sb-logo">SPEED AUDIT</div>
+            <div class="sb-score-row">
+              <div class="sb-sc-box">
+                <div class="sb-sc-val">{m_score}</div>
+                <div class="sb-sc-lbl">MOBILE</div>
+              </div>
+              <div class="sb-sc-box">
+                <div class="sb-sc-val" style="color:#fcd34d">{d_score}</div>
+                <div class="sb-sc-lbl">DESKTOP</div>
               </div>
             </div>
-            <div class="cat-summary-bar">
-              <span class="mini-pill green">✓ {pass_c} Good</span>
-              <span class="mini-pill amber">⚠ {warn_c} Improve</span>
-              <span class="mini-pill red">✗ {fail_c} Fix</span>
-              {info_pill}
-            </div>
-            <div class="checks-grid">{items_html}</div>
+            <div class="sb-stat"><span class="sl">Grade (M)</span><span class="sv">{m_grade}</span></div>
+            <div class="sb-stat"><span class="sl">Grade (D)</span><span class="sv" style="color:#fcd34d">{d_grade}</span></div>
+            <div class="sb-slide-num">SLIDE {slide_num} / {total_slides_str}</div>
+            <div class="sb-domain">{m_cat["name"]}</div>
+          </div>
+          <div class="slide-content" style="justify-content: flex-start; padding-top: 40px">
+            <div class="c-title">{m_cat["name"]}</div>
+            <div class="c-sub">{m_cat["tagline"]}</div>
+            <div class="check-list">{items_html}</div>
           </div>
         </div>"""
 
-        # ── Nav dots ──────────────────────────────────────────────────────────
         dots_html = "".join(
-            f'<span class="dot" data-goto="{i}"></span>'
-            for i in range(1, total_slides + 1)
+            f'<div class="dot {"active" if i == 0 else ""}" data-goto="{i+1}"></div>'
+            for i in range(total_slides)
         )
 
-        # ── Full HTML ─────────────────────────────────────────────────────────
-        return f"""<!DOCTYPE html>
+        html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Speed Report — {domain}</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-*,*::before,*::after{{ box-sizing:border-box; margin:0; padding:0; }}
-:root{{
-  --cream:#fafaf7; --white:#ffffff; --ink:#111827; --muted:#6b7280; --border:#e5e7eb;
-  --green:#16a34a; --green-bg:#f0fdf4; --amber:#d97706; --amber-bg:#fffbeb;
-  --red:#dc2626;   --red-bg:#fef2f2;   --blue:#2563eb;  --blue-bg:#eff6ff;
-  --accent:#0284c7;
-}}
-html,body{{ height:100%; width:100%; background:#0c1a2e; font-family:'Plus Jakarta Sans',sans-serif; overflow:hidden; }}
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+html, body {{ height: 100%; background: #e8edf5; font-family: "Sora", sans-serif; overflow: hidden; color: #0a0f1e; }}
+.deck {{ width: 100vw; height: 100vh; position: relative; }}
+.slide {{ position: absolute; inset: 0; opacity: 0; pointer-events: none; transform: scale(0.97); transition: opacity 0.38s ease, transform 0.38s ease; display: flex; overflow: hidden; }}
+.slide.active {{ opacity: 1; pointer-events: all; transform: scale(1); }}
+.slide.exit {{ opacity: 0; transform: scale(1.02); }}
+.slide-sidebar {{ width: 280px; flex-shrink: 0; padding: 48px 32px; display: flex; flex-direction: column; }}
+.slide-content {{ flex: 1; background: #fff; padding: 52px 48px; overflow-y: auto; display: flex; flex-direction: column; justify-content: center; }}
+.sb-logo {{ font-size: 13px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.5; margin-bottom: 48px; }}
 
-.deck{{ width:100vw; height:100vh; position:relative; overflow:hidden; }}
-.slide{{
-  position:absolute; inset:0; opacity:0; pointer-events:none;
-  transform:translateX(56px); transition:opacity 0.42s ease, transform 0.42s ease;
-  overflow-y:auto; background:var(--cream);
-}}
-.slide.active{{ opacity:1; pointer-events:all; transform:translateX(0); }}
-.slide.exit{{ opacity:0; transform:translateX(-56px); }}
-.slide-inner{{ max-width:900px; margin:0 auto; padding:52px 48px 110px; min-height:100vh; }}
+.sb-score-row {{ display: flex; gap: 16px; margin-bottom: 32px; }}
+.sb-sc-box {{ flex: 1; }}
+.sb-sc-val {{ font-size: 48px; font-weight: 800; line-height: 1; letter-spacing: -0.04em; }}
+.sb-sc-lbl {{ font-size: 10px; font-weight: 700; opacity: 0.5; margin-top: 4px; }}
 
-/* Nav */
-.nav{{
-  position:fixed; bottom:0; left:0; right:0;
-  background:rgba(255,255,255,0.96); backdrop-filter:blur(14px);
-  border-top:1px solid var(--border);
-  display:flex; align-items:center; justify-content:space-between;
-  padding:14px 40px; z-index:100; gap:16px;
-}}
-.nav-btn{{
-  display:flex; align-items:center; gap:8px; padding:10px 22px;
-  border-radius:50px; border:2px solid var(--border); background:var(--white);
-  color:var(--ink); font-family:'Plus Jakarta Sans',sans-serif;
-  font-weight:600; font-size:0.875rem; cursor:pointer; transition:all 0.2s;
-}}
-.nav-btn:hover{{ background:var(--ink); color:white; border-color:var(--ink); }}
-.nav-btn:disabled{{ opacity:0.3; cursor:not-allowed; }}
-.nav-btn:disabled:hover{{ background:var(--white); color:var(--ink); border-color:var(--border); }}
-.dots{{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; justify-content:center; flex:1; }}
-.dot{{ width:8px; height:8px; border-radius:50%; background:var(--border); cursor:pointer; transition:all 0.2s; }}
-.dot.active{{ background:var(--accent); width:24px; border-radius:4px; }}
-.slide-counter{{ font-size:0.75rem; color:var(--muted); font-weight:600; white-space:nowrap; min-width:60px; text-align:right; }}
+.sb-stat {{ display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.12); }}
+.sb-stat .sl {{ font-size: 11px; font-weight: 600; opacity: 0.6; }}
+.sb-stat .sv {{ font-size: 16px; font-weight: 800; }}
+.sb-slide-num {{ margin-top: auto; font-size: 11px; font-weight: 700; opacity: 0.35; letter-spacing: 0.1em; }}
+.sb-domain {{ font-size: 12px; font-weight: 600; opacity: 0.35; margin-top: 6px; }}
 
-/* Cover */
-.cover{{ background:linear-gradient(150deg,#f0f9ff 0%,#e0f2fe 50%,#fafaf7 100%); display:flex; align-items:center; }}
-.cover .slide-inner{{ display:flex; flex-direction:column; justify-content:center; min-height:100vh; }}
-.eyebrow{{
-  display:inline-flex; align-items:center; gap:8px;
-  background:white; border:1px solid var(--border); border-radius:50px;
-  padding:6px 16px; font-size:0.72rem; font-weight:700; color:var(--accent);
-  letter-spacing:0.1em; text-transform:uppercase; margin-bottom:24px; width:fit-content;
-}}
-.cover-title{{ font-family:'Playfair Display',serif; font-size:clamp(2rem,5vw,3.5rem); font-weight:900; color:var(--ink); line-height:1.1; margin-bottom:10px; }}
-.cover-domain{{ font-family:'Playfair Display',serif; font-size:clamp(1.1rem,2.5vw,1.7rem); color:var(--accent); margin-bottom:6px; }}
-.cover-meta{{ font-size:0.8rem; color:var(--muted); margin-bottom:8px; }}
-.strategy-tag{{ display:inline-flex; align-items:center; gap:6px; background:var(--ink); color:white; font-size:0.72rem; font-weight:700; padding:5px 14px; border-radius:50px; margin-bottom:32px; }}
+.cover-sb {{ background: #0a0f1e; color: #fff; }}
+.cover-sb .sb-sc-val {{ color: #6366f1; }}
+.sum-sb {{ background: #6366f1; color: #fff; }}
+.spd-sb {{ background: #b45309; color: #fff; }}
+.end-sb {{ background: #1e1b4b; color: #fff; }}
 
-/* Hero score card */
-.hero-card{{
-  background:white; border:1px solid var(--border); border-radius:24px;
-  padding:32px 36px; box-shadow:0 4px 32px rgba(0,0,0,0.07);
-}}
-.hero-top{{ display:flex; align-items:center; gap:32px; flex-wrap:wrap; margin-bottom:24px; }}
-.hero-ring-wrap{{ position:relative; flex-shrink:0; }}
-.hero-ring-wrap svg{{ transform:rotate(-90deg); }}
-.ring-center{{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }}
-.ring-num{{ font-family:'Playfair Display',serif; font-size:2.6rem; font-weight:900; color:{pc}; line-height:1; }}
-.ring-of{{ font-size:0.72rem; color:var(--muted); }}
-.ring-grade{{ background:{pc}; color:white; font-weight:800; font-size:0.65rem; letter-spacing:0.1em; padding:3px 9px; border-radius:20px; margin-top:5px; }}
-.hero-words{{ flex:1; min-width:180px; }}
-.hero-verdict{{ font-family:'Playfair Display',serif; font-size:1.5rem; font-weight:700; color:{pc}; margin-bottom:8px; }}
-.hero-desc{{ font-size:0.86rem; color:var(--muted); line-height:1.6; }}
+.cover-title {{ font-size: 40px; font-weight: 800; line-height: 1.15; letter-spacing: -0.03em; margin-bottom: 16px; color: #0a0f1e; }}
+.cover-sub {{ font-size: 15px; color: #64748b; margin-bottom: 36px; line-height: 1.6; }}
 
-/* Speed bar */
-.speed-bar-wrap{{ margin-top:4px; }}
-.speed-bar-label{{ display:flex; justify-content:space-between; font-size:0.78rem; font-weight:600; color:var(--ink); margin-bottom:8px; }}
-.speed-bar-track{{ height:16px; background:#f3f4f6; border-radius:99px; overflow:hidden; position:relative; }}
-.speed-bar-fill{{ height:100%; border-radius:99px; background:linear-gradient(90deg,#16a34a,{pc}); transition:width 1.2s ease; }}
-.speed-bar-zones{{ display:flex; gap:12px; margin-top:8px; }}
-.speed-zone{{ font-size:0.68rem; font-weight:600; }}
-.speed-zone.g{{ color:var(--green); }}
-.speed-zone.a{{ color:var(--amber); }}
-.speed-zone.r{{ color:var(--red);   }}
+.gauge-grid {{ display: flex; gap: 120px; margin-bottom: 60px; justify-content: center; padding: 20px 0; }}
+.gauge-item {{ text-align: center; display: flex; flex-direction: column; align-items: center; }}
+.gauge-label {{ font-size: 14px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 24px; }}
+.gauge-visual {{ position: relative; width: 220px; height: 220px; display: flex; align-items: center; justify-content: center; }}
+.gauge-svg {{ width: 220px; height: 220px; transform: rotate(-90deg); }}
+.gauge-bg {{ fill: none; stroke: #f1f5f9; stroke-width: 4; }}
+.gauge-fill {{ fill: none; stroke-width: 4; stroke-linecap: round; transition: stroke-dashoffset 1s ease-out; }}
+.gauge-center {{ position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }}
+.gauge-val {{ font-size: 64px; font-weight: 800; }}
 
-/* CWV slide */
-.slide-title{{ font-family:'Playfair Display',serif; font-size:1.9rem; font-weight:900; color:var(--ink); margin-bottom:6px; }}
-.slide-sub{{ color:var(--muted); font-size:0.88rem; line-height:1.6; margin-bottom:24px; }}
-.cwv-grid{{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }}
-.cwv-card{{ border-radius:16px; border:1.5px solid; padding:18px 18px 14px; transition:transform 0.15s; }}
-.cwv-card:hover{{ transform:translateY(-2px); }}
-.cwv-top{{ display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:8px; }}
-.cwv-abbr{{ font-family:'Playfair Display',serif; font-size:1rem; font-weight:900; letter-spacing:0.04em; }}
-.cwv-name{{ font-size:0.72rem; color:var(--muted); font-weight:600; margin-top:2px; }}
-.cwv-val{{ font-family:'Playfair Display',serif; font-size:1.7rem; font-weight:900; line-height:1; }}
-.cwv-desc{{ font-size:0.74rem; color:var(--muted); line-height:1.5; margin-bottom:6px; }}
-.cwv-why{{ font-size:0.72rem; color:var(--ink); line-height:1.4; margin-bottom:10px; font-style:italic; }}
-.cwv-footer{{ display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:6px; }}
-.cwv-badge{{ color:white; font-size:0.66rem; font-weight:700; padding:3px 10px; border-radius:50px; white-space:nowrap; }}
-.cwv-scale{{ font-size:0.62rem; color:var(--muted); }}
+.c-title {{ font-size: 32px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 8px; color: #0a0f1e; }}
+.c-sub {{ font-size: 14px; color: #64748b; margin-bottom: 32px; }}
+.m-table {{ width: 100%; border-collapse: collapse; margin-top: 16px; }}
+.m-table th {{ text-align: left; padding: 12px; font-size: 11px; font-weight: 800; color: #64748b; text-transform: uppercase; border-bottom: 2px solid #f1f5f9; }}
+.m-table td {{ padding: 16px 12px; border-bottom: 1px solid #f1f5f9; font-size: 14px; }}
+.m-table small {{ display: block; font-size: 11px; font-weight: 500; color: #94a3b8; margin-top: 2px; }}
+.check-list {{ display: flex; flex-direction: column; gap: 8px; }}
+.ci {{ display: flex; gap: 14px; padding: 13px 16px; border-radius: 10px; background: #f8fafc; border: 1px solid #e2e8f0; align-items: flex-start; }}
+.cico {{ font-size: 18px; flex-shrink: 0; margin-top: 1px; }}
+.ctx h4 {{ font-size: 13px; font-weight: 700; color: #0f172a; margin-bottom: 2px; }}
+.ctx p {{ font-size: 12px; color: #64748b; line-height: 1.5; }}
+.cbdg {{ flex-shrink: 0; margin-left: auto; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 6px; white-space: nowrap; text-transform: uppercase; }}
+.bd-r {{ background: #fee2e2; color: #dc2626; }}
+.bd-y {{ background: #fef9c3; color: #d97706; }}
+.bd-b {{ background: #dbeafe; color: #1d4ed8; }}
+.bd-g {{ background: #dcfce7; color: #15803d; }}
 
-/* Category slides */
-.cat-header{{ display:flex; align-items:flex-start; gap:16px; margin-bottom:16px; }}
-.cat-icon{{ font-size:2.2rem; line-height:1; flex-shrink:0; }}
-.cat-title{{ font-family:'Playfair Display',serif; font-size:1.7rem; font-weight:900; color:var(--ink); line-height:1.2; margin-bottom:4px; }}
-.cat-tagline{{ font-size:0.84rem; color:var(--muted); line-height:1.5; }}
-.cat-summary-bar{{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px; }}
-.mini-pill{{ padding:4px 12px; border-radius:50px; font-size:0.74rem; font-weight:700; }}
-.mini-pill.green{{ background:var(--green-bg); color:var(--green); }}
-.mini-pill.amber{{ background:var(--amber-bg); color:var(--amber); }}
-.mini-pill.red  {{ background:var(--red-bg);   color:var(--red);   }}
-.mini-pill.blue {{ background:var(--blue-bg);  color:var(--blue);  }}
-.checks-grid{{ display:flex; flex-direction:column; gap:10px; }}
-.check-card{{ border-radius:12px; border:1.5px solid; padding:13px 15px; transition:transform 0.15s; }}
-.check-card:hover{{ transform:translateY(-1px); }}
-.check-card-top{{ display:flex; align-items:flex-start; gap:12px; }}
-.check-emoji{{ font-size:1.2rem; flex-shrink:0; line-height:1.4; }}
-.check-info{{ flex:1; }}
-.check-title{{ font-size:0.86rem; font-weight:700; color:var(--ink); margin-bottom:3px; }}
-.check-desc{{ font-size:0.73rem; color:var(--muted); line-height:1.5; }}
-.check-badge{{ flex-shrink:0; color:white; font-size:0.64rem; font-weight:700; padding:3px 9px; border-radius:50px; white-space:nowrap; align-self:flex-start; }}
+.premium-cta {{ background: linear-gradient(135deg, #f8faff 0%, #f1f5fe 100%); border-radius: 24px; padding: 40px; margin-top: 24px; display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 32px; align-items: center; border: 1px solid #e2e8f1; text-align: left; }}
+.hero-text h3 {{ font-size: 22px; font-weight: 800; color: #0a0f1e; margin-bottom: 12px; }}
+.hero-text p {{ font-size: 13px; color: #64748b; line-height: 1.6; margin-bottom: 24px; }}
+.p-btn {{ display: block; background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; padding: 16px; border-radius: 12px; text-decoration: none; font-weight: 800; font-size: 13px; text-align: center; }}
 
-/* End slide */
-.end-slide{{ background:linear-gradient(145deg,#0c1a2e 0%,#063555 100%); }}
-.end-slide .slide-inner{{ display:flex; flex-direction:column; justify-content:center; min-height:100vh; }}
-.end-eyebrow{{ display:inline-flex; align-items:center; gap:8px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); border-radius:50px; padding:6px 16px; font-size:0.7rem; font-weight:700; color:rgba(255,255,255,0.55); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:22px; width:fit-content; }}
-.end-title{{ font-family:'Playfair Display',serif; font-size:clamp(1.8rem,4vw,3rem); font-weight:900; color:white; line-height:1.15; margin-bottom:14px; }}
-.end-sub{{ font-size:0.9rem; color:rgba(255,255,255,0.55); line-height:1.7; margin-bottom:32px; max-width:580px; }}
-.end-metrics{{ display:flex; gap:12px; flex-wrap:wrap; margin-bottom:32px; }}
-.end-metric{{ background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:16px 18px; text-align:center; min-width:90px; }}
-.end-metric-val{{ font-family:'Playfair Display',serif; font-size:1.5rem; font-weight:900; line-height:1; margin-bottom:4px; }}
-.end-metric-lbl{{ font-size:0.65rem; color:rgba(255,255,255,0.45); font-weight:600; }}
-.end-footer{{ font-size:0.68rem; color:rgba(255,255,255,0.22); }}
-
-.key-hint{{ position:fixed; top:18px; right:18px; background:rgba(0,0,0,0.45); color:white; font-size:0.66rem; padding:5px 13px; border-radius:50px; opacity:0.55; pointer-events:none; z-index:200; }}
-
-@media(max-width:640px){{
-  .slide-inner{{ padding:28px 18px 100px; }}
-  .hero-card{{ padding:20px; }}
-  .nav{{ padding:10px 16px; }}
+.floating-nav {{ position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.4); box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.1); padding: 10px 14px; border-radius: 100px; display: flex; align-items: center; gap: 16px; z-index: 1000; }}
+.nav-btn {{ background: transparent; border: none; color: #0a0f1e; font-size: 18px; cursor: pointer; padding: 8px; border-radius: 50%; }}
+.nav-btn:hover {{ background: rgba(99, 102, 241, 0.1); color: #6366f1; }}
+.nav-btn:disabled {{ opacity: 0.2; cursor: default; }}
+.step-dots {{ display: flex; gap: 8px; align-items: center; }}
+.dot {{ width: 8px; height: 8px; border-radius: 50%; background: #e2e8f0; cursor: pointer; transition: all 0.3s; }}
+.dot.active {{ background: #6366f1; width: 24px; border-radius: 10px; }}
+.nav-ctr {{ font-size: 11px; font-weight: 800; color: #94a3b8; min-width: 35px; }}
+@media print {{
+  @page {{ size: A4 landscape; margin: 0; }}
+  html, body {{ height: auto !important; overflow: visible !important; background: white !important; }}
+  .deck {{ height: auto !important; width: 100% !important; display: block !important; overflow: visible !important; }}
+  .slide {{ position: relative !important; opacity: 1 !important; transform: none !important; display: flex !important; page-break-after: always !important; break-after: page !important; height: auto !important; min-height: 21cm; }}
+  .slide-sidebar {{ width: 220px !important; }}
+  .floating-nav {{ display: none !important; }}
 }}
 </style>
 </head>
 <body>
-<div class="key-hint">← → Arrow keys to navigate</div>
 <div class="deck" id="deck">
 
-  <!-- SLIDE 1: Cover -->
-  <div class="slide cover active" data-slide="1">
-    <div class="slide-inner">
-      <div class="eyebrow"><span>⚡</span> WEBSITE SPEED REPORT</div>
-      <div class="cover-title">How fast does your<br>website actually load?</div>
-      <div class="cover-domain">{domain}</div>
-      <div class="cover-meta">Analyzed on {data["timestamp"]}</div>
-      <div class="strategy-tag">{strategy_tag} Test</div>
-      <div class="hero-card">
-        <div class="hero-top">
-          <div class="hero-ring-wrap">
-            <svg width="130" height="130" viewBox="0 0 130 130">
-              <circle cx="65" cy="65" r="54" fill="none" stroke="#f3f4f6" stroke-width="10"/>
-              <circle cx="65" cy="65" r="54" fill="none" stroke="{pc}" stroke-width="10"
-                stroke-linecap="round" stroke-dasharray="{rd} 999"/>
-            </svg>
-            <div class="ring-center">
-              <div class="ring-num">{data["perf_score"]}</div>
-              <div class="ring-of">out of 100</div>
-              <div class="ring-grade">GRADE {pg}</div>
-            </div>
-          </div>
-          <div class="hero-words">
-            <div class="hero-verdict">{verdict}</div>
-            <div class="hero-desc">{verdict_desc}</div>
-          </div>
+  <!-- SLIDE 01: Cover -->
+  <div class="slide active">
+    <div class="slide-sidebar cover-sb">
+      <div class="sb-logo">SPEED AUDIT</div>
+      <div class="sb-score-row">
+        <div class="sb-sc-box">
+          <div class="sb-sc-val">{m_score}</div>
+          <div class="sb-sc-lbl">MOBILE</div>
         </div>
-        <div class="speed-bar-wrap">
-          <div class="speed-bar-label">
-            <span>Speed Score</span>
-            <span style="color:{pc};">{data["perf_score"]}/100</span>
-          </div>
-          <div class="speed-bar-track">
-            <div class="speed-bar-fill" style="width:{speed_bar_w}%;"></div>
-          </div>
-          <div class="speed-bar-zones">
-            <span class="speed-zone r">0–49 Slow</span>
-            <span class="speed-zone a">50–89 Needs Work</span>
-            <span class="speed-zone g">90–100 Fast</span>
-          </div>
+        <div class="sb-sc-box">
+          <div class="sb-sc-val" style="color:#6366f1">{d_score}</div>
+          <div class="sb-sc-lbl">DESKTOP</div>
         </div>
+      </div>
+      <div class="sb-stat"><span class="sl">Grade (M)</span><span class="sv">{m_grade}</span></div>
+      <div class="sb-stat"><span class="sl">Grade (D)</span><span class="sv" style="color:#6366f1">{d_grade}</span></div>
+      <div class="sb-slide-num">SLIDE 01 / {total_slides_str}</div>
+      <div class="sb-domain">{domain}</div>
+    </div>
+    <div class="slide-content">
+      <div class="cover-title">Multi-Platform Speed Analysis</div>
+      <div class="cover-sub">Comparing performance signals for <strong>{domain}</strong> across Mobile and Desktop. Generated on {timestamp}.</div>
+      
+      <div class="gauge-grid">
+        {get_gauge_html(m_score, "📱 Mobile Performance", m_color)}
+        {get_gauge_html(d_score, "🖥️ Desktop Performance", d_color)}
+      </div>
+
+      <div style="background:#f1f5f9; padding:20px; border-radius:16px; font-size:13px; color:#475569; line-height:1.5;">
+        <strong>Why analyze both?</strong> Google uses "Mobile-First" indexing, meaning your mobile speed determines your rank. However, desktop speed remains critical for conversion and user engagement.
       </div>
     </div>
   </div>
 
-  <!-- SLIDE 2: Core Web Vitals -->
-  <div class="slide" data-slide="2">
-    <div class="slide-inner">
-      <div class="slide-title">Your Speed Measurements</div>
-      <div class="slide-sub">Google measures page speed using 6 specific signals called Core Web Vitals. Each one tells a different story about how your website feels to real visitors. Here's how you scored on each one.</div>
-      <div class="cwv-grid">{cwv_cards_html}</div>
+  <!-- SLIDE 02: CWV Comparison -->
+  <div class="slide">
+    <div class="slide-sidebar sum-sb">
+      <div class="sb-logo">SPEED AUDIT</div>
+      <div class="sb-score-row">
+        <div class="sb-sc-box">
+          <div class="sb-sc_val" style="font-size:24px; color:#fff">M vs D</div>
+        </div>
+      </div>
+      <div class="sb-stat"><span class="sl">Status</span><span class="sv">Analyzed</span></div>
+      <div class="sb-slide-num">SLIDE 02 / {total_slides_str}</div>
+      <div class="sb-domain">Core Web Vitals</div>
+    </div>
+    <div class="slide-content">
+      <div class="c-title">Core Metrics Comparison</div>
+      <div class="c-sub">Comparison of Core Web Vitals across both strategies.</div>
+      
+      <table class="m-table">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>📱 Mobile</th>
+            <th>🖥️ Desktop</th>
+          </tr>
+        </thead>
+        <tbody>
+          {metrics_html}
+        </tbody>
+      </table>
     </div>
   </div>
 
   <!-- CATEGORY SLIDES -->
   {category_slides}
 
-  <!-- END SLIDE -->
-  <div class="slide end-slide" data-slide="{total_slides}">
-    <div class="slide-inner">
-      <div class="end-eyebrow"><span>🏁</span> REPORT COMPLETE</div>
-      <div class="end-title">Here's your website<br>speed summary.</div>
-      <div class="end-sub">Fix the ❌ red items first — they have the biggest impact on load time. Images and unused JavaScript are usually the quickest wins. Even shaving 1 second off load time can meaningfully increase conversions.</div>
-      <div class="end-metrics">
-        <div class="end-metric">
-          <div class="end-metric-val" style="color:{pc};">{data["perf_score"]}</div>
-          <div class="end-metric-lbl">Speed Score</div>
+  <!-- SLIDE: End -->
+  <div class="slide">
+    <div class="slide-sidebar end-sb">
+      <div class="sb-logo">SPEED AUDIT</div>
+      <div class="sb-score-row">
+        <div class="sb-sc-box">
+          <div class="sb-sc-val">{m_score}</div>
+          <div class="sb-sc-lbl">FINAL (M)</div>
         </div>
-        <div class="end-metric">
-          <div class="end-metric-val" style="color:{lcp_c};">{data["lcp"]}</div>
-          <div class="end-metric-lbl">LCP</div>
-        </div>
-        <div class="end-metric">
-          <div class="end-metric-val" style="color:{tbt_c};">{data["tbt"]}</div>
-          <div class="end-metric-lbl">TBT</div>
-        </div>
-        <div class="end-metric">
-          <div class="end-metric-val" style="color:{cls_c};">{data["cls"]}</div>
-          <div class="end-metric-lbl">CLS</div>
-        </div>
-        <div class="end-metric">
-          <div class="end-metric-val" style="color:{fcp_c};">{data["fcp"]}</div>
-          <div class="end-metric-lbl">FCP</div>
+        <div class="sb-sc-box">
+          <div class="sb-sc-val" style="color:#a5b4fc">{d_score}</div>
+          <div class="sb-sc-lbl">FINAL (D)</div>
         </div>
       </div>
-      <div class="end-footer">Powered by Google PageSpeed Insights API · {data["timestamp"]}</div>
+      <div class="sb-stat"><span class="sl">Status</span><span class="sv">Complete</span></div>
+      <div class="sb-slide-num">SLIDE {total_slides} / {total_slides}</div>
+      <div class="sb-domain">Complete</div>
+    </div>
+    <div class="slide-content" style="justify-content: center; padding: 48px">
+      <div style="display:inline-block; background:#f0f9ff; color:#0369a1; font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; padding:6px 16px; border-radius:50px; margin-bottom:24px;">🎉 Audit Complete</div>
+      <div class="cover-title" style="font-size: 48px; line-height: 1">Let's build your<br><span style="color: #6366f1">digital dominance.</span></div>
+
+      <div class="premium-cta">
+        <div class="hero-text">
+          <h3>Optimized for every screen.</h3>
+          <p>Fast load times are no longer optional. We've identified the key opportunities to make your site fly on both mobile and desktop.</p>
+          <div style="display: flex; align-items: center; gap: 12px">
+            <div style="width: 40px; height: 40px; border-radius: 50%; background:#6366f1; display:flex; align-items:center; justify-content:center; color:white; font-weight:bold;">NH</div>
+            <div>
+              <div style="font-size: 12px; font-weight: 800; color: #0a0f1e">Notionhive Digital Agency</div>
+              <div style="font-size: 11px; color: #64748b">15+ Years · 1,500+ Projects</div>
+            </div>
+          </div>
+        </div>
+        <div class="action-box">
+          <a href="https://notionhive.com" class="p-btn">Claim Your Free Audit</a>
+          <div style="margin-top: 16px; font-size: 10px; font-weight: 700; color: #94a3b8; letter-spacing: 0.05em; text-align:center;">HELLO@NOTIONHIVE.COM</div>
+        </div>
+      </div>
     </div>
   </div>
 
 </div>
 
-<nav class="nav">
-  <button class="nav-btn" id="prevBtn" onclick="changeSlide(-1)" disabled>← Back</button>
-  <div class="dots" id="dots">{dots_html}</div>
-  <span class="slide-counter" id="counter">1 / {total_slides}</span>
-  <button class="nav-btn" id="nextBtn" onclick="changeSlide(1)">Next →</button>
-</nav>
+<div class="floating-nav">
+  <button class="nav-btn" id="prev" onclick="go(-1)">←</button>
+  <div class="step-dots" id="dots">{dots_html}</div>
+  <span class="nav-ctr" id="ctr">1 / {total_slides}</span>
+  <button class="nav-btn" id="next" onclick="go(1)">→</button>
+</div>
 
 <script>
-const slides = document.querySelectorAll('.slide');
-const dots   = document.querySelectorAll('.dot');
-const prev   = document.getElementById('prevBtn');
-const next   = document.getElementById('nextBtn');
-const ctr    = document.getElementById('counter');
-const total  = slides.length;
-let cur      = 0;
+const slides = document.querySelectorAll(".slide");
+const ctr = document.getElementById("ctr");
+const prev = document.getElementById("prev");
+const next = document.getElementById("next");
+let cur = 0;
 
 function goTo(n) {{
-  slides[cur].classList.remove('active');
-  slides[cur].classList.add('exit');
-  const old = cur;
-  setTimeout(() => slides[old].classList.remove('exit'), 500);
+  if (n < 0 || n >= slides.length) return;
+  slides[cur].classList.remove("active");
+  slides[cur].classList.add("exit");
+  const o = cur;
+  setTimeout(() => {{ if(slides[o]) slides[o].classList.remove("exit"); }}, 400);
   cur = n;
-  slides[cur].classList.add('active');
-  dots.forEach((d,i) => d.classList.toggle('active', i===cur));
-  ctr.textContent = (cur+1)+' / '+total;
-  prev.disabled = cur===0;
-  next.disabled = cur===total-1;
+  slides[cur].classList.add("active");
+  document.querySelectorAll(".dot").forEach((d, i) => d.classList.toggle("active", i === cur));
+  ctr.textContent = (cur + 1) + " / " + slides.length;
+  prev.disabled = cur === 0;
+  next.disabled = cur === slides.length - 1;
   slides[cur].scrollTop = 0;
 }}
-function changeSlide(dir) {{
-  const n = cur+dir;
-  if(n>=0 && n<total) goTo(n);
+
+function go(d) {{
+  goTo(cur + d);
 }}
-dots.forEach((d,i) => d.addEventListener('click', ()=>goTo(i)));
-document.addEventListener('keydown', e=>{{
-  if(e.key==='ArrowRight'||e.key==='ArrowDown') changeSlide(1);
-  if(e.key==='ArrowLeft' ||e.key==='ArrowUp')   changeSlide(-1);
+
+document.querySelectorAll(".dot").forEach((d, i) => {{
+  d.onclick = () => goTo(i);
 }});
+
+document.addEventListener("keydown", (e) => {{
+  if (e.key === "ArrowRight" || e.key === "ArrowDown") go(1);
+  if (e.key === "ArrowLeft" || e.key === "ArrowUp") go(-1);
+}});
+
 goTo(0);
 </script>
 </body>
 </html>"""
-
+        return html
     except Exception as e:
-        return f"<h1>Error generating speed report: {e}</h1>"
+        return f"<h1>Error generating dual speed report: {e}</h1>"

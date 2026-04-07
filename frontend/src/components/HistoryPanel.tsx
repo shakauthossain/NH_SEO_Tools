@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { History, ChevronRight } from "lucide-react";
+import { History, ChevronRight, Link as LinkIcon, Download } from "lucide-react";
+import { API_BASE_URL as API_URL } from "../api";
 
 export interface HistoryItem {
   id: string;
@@ -72,13 +73,29 @@ export default function HistoryPanel({
                           {item.date}
                         </span>
                       </div>
-                      <div className="flex gap-2">
-                        <span className="text-[10px] uppercase font-bold text-pass">
-                          SEO: {item.seoGrade}
-                        </span>
-                        <span className="text-[10px] uppercase font-bold text-warn">
-                          Speed: {item.speedGrade}
-                        </span>
+                      <div className="flex justify-between items-center mt-3 pt-3 border-t border-border-subtle/40">
+                        <div className="flex gap-2">
+                          <span className="text-[10px] uppercase font-bold text-pass">
+                            SEO: {item.seoGrade}
+                          </span>
+                          <span className="text-[10px] uppercase font-bold text-warn">
+                            Speed: {item.speedGrade}
+                          </span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const fullLink = `${API_URL}/reports/${item.id}_seo.html`;
+                              navigator.clipboard.writeText(fullLink);
+                              alert("Shareable link copied!");
+                            }}
+                            className="p-1 text-text-muted hover:text-accent"
+                            title="Copy SEO Link"
+                          >
+                            <LinkIcon className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))

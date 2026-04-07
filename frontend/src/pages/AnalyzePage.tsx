@@ -1,6 +1,6 @@
 import React from "react";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { API_BASE_URL as API_URL } from "../api";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -14,6 +14,8 @@ import {
   CheckCircle,
   Loader2,
   History,
+  ExternalLink,
+  Link as LinkIcon,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { CircularProgress } from "../components/CircularProgress";
@@ -205,6 +207,7 @@ export default function AnalyzePage({
           key="analyzing"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
           className="w-full max-w-xl py-12"
         >
           <div className="flex items-center gap-4 mb-8">
@@ -283,46 +286,64 @@ export default function AnalyzePage({
                     {auditData.seo.seo_score || "N/A"}
                   </div>
                 </div>
-                <div className="space-y-3 mb-8 flex-1">
+                <div className="space-y-4 mb-8 flex-1">
+                  <div className="relative h-1.5 w-full rounded-full overflow-hidden bg-bg-hover">
+                    {/* SEO Health Bar - Direct Score Representation */}
+                    <div 
+                      className="absolute inset-y-0 left-0 bg-pass transition-all duration-500" 
+                      style={{ 
+                        width: `${auditData.seo.seo_score || 0}%`,
+                      }} 
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pb-2 border-b border-border-subtle">
+                    <div className="text-[10px] font-bold text-text-muted uppercase">Priority Fixes</div>
+                    <div className="text-[10px] font-bold text-text-muted uppercase text-right">Status</div>
+                  </div>
+
                   {(auditData.seo.seo_tests || [])
+                    .filter((t: any) => t.status === "fail")
                     .slice(0, 3)
                     .map((test: any) => (
                       <div
                         key={test.title}
-                        className="flex justify-between items-center py-2 border-b border-border-subtle"
+                        className="flex justify-between items-start py-1"
                       >
-                        <span className="text-text-muted text-sm capitalize">
-                          {test.title}
-                        </span>
-                        <span
-                          className={`text-sm font-bold ${
-                            test.status === "pass" || test.status === "check"
-                              ? "text-pass"
-                              : test.status === "warning"
-                                ? "text-warn"
-                                : "text-fail"
-                          }`}
-                        >
-                          {test.status === "pass" || test.status === "check"
-                            ? "PASS"
-                            : test.status === "warning"
-                              ? "WARN"
-                              : "FAIL"}
-                        </span>
+                        <div className="flex flex-col gap-0.5 max-w-[80%]">
+                           <span className="text-text-main text-xs font-semibold capitalize whitespace-nowrap overflow-hidden text-ellipsis">
+                             {test.title.split('?')[0].trim()}
+                           </span>
+                           <span className="text-text-muted text-[11px] line-clamp-1">
+                             Critical SEO optimization required.
+                           </span>
+                        </div>
+                        <span className="text-xs font-extrabold text-fail shrink-0">CRITICAL</span>
                       </div>
                     ))}
+                  
+                  {auditData.seo.seo_tests?.filter((t: any) => t.status === "fail").length === 0 && (
+                    <div className="flex items-center gap-2 text-pass py-2">
+                      <CheckCircle className="w-4 h-4" />
+                      <span className="text-xs font-semibold">No critical issues found!</span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-3">
-                  <button
-                    onClick={() => setViewingDetails("seo")}
-                    className="flex-1 bg-bg-hover border border-border-subtle py-2 rounded-lg text-sm font-medium"
+                  <a
+                    href={`${API_URL}/reports/${auditData.id}_seo.html`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 bg-bg-hover border border-border-subtle py-2 rounded-lg text-sm font-medium text-center hover:bg-bg-card transition-colors flex items-center justify-center gap-2"
                   >
-                    Deep Dive
-                  </button>
+                    Deep Dive <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
                   <a
                     href={`${API_URL}/reports/${auditData.id}_seo.pdf`}
-                    className="p-2 border border-border-subtle rounded-lg"
+                    className="p-2 border border-border-subtle rounded-lg text-text-muted hover:text-accent hover:border-accent transition-colors"
                     title="Download PDF"
+                    target="_blank"
+                    rel="noopener noreferrer"
                   >
                     <Download className="w-4 h-4" />
                   </a>
@@ -336,46 +357,85 @@ export default function AnalyzePage({
                 variants={itemVariants}
                 className="bg-bg-card border border-border-subtle rounded-xl p-6 hover:border-border-focus flex flex-col"
               >
-                <div className="flex justify-between items-start mb-8">
+                <div className="flex justify-between items-start mb-6">
                   <div className="flex items-center gap-3">
                     <Zap className="w-5 h-5 text-warn" />
                     <h3 className="text-lg font-semibold">Page Experience</h3>
                   </div>
-                  <div className="text-4xl font-bold text-pass">
-                    {auditData.speed.perf_score || "N/A"}
+                  <div className="flex gap-4">
+                    <div className="text-center">
+                      <div className="text-[10px] uppercase font-bold text-text-muted mb-0.5">Mobile</div>
+                      <div className="text-3xl font-bold text-pass leading-tight">
+                        {auditData.speed.mobile?.perf_score || auditData.speed.perf_score || "N/A"}
+                      </div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-[10px] uppercase font-bold text-text-muted mb-0.5">Desktop</div>
+                      <div className="text-3xl font-bold text-accent leading-tight">
+                        {auditData.speed.desktop?.perf_score || "N/A"}
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div className="space-y-3 mb-8 flex-1">
-                  <div className="flex justify-between py-2 border-b border-border-subtle">
-                    <span className="text-text-muted text-sm">FCP</span>
-                    <span className="text-sm font-bold">
-                      {auditData.speed.metrics?.fcp}
+                <div className="space-y-4 mb-8 flex-1">
+                  <div className="relative h-1.5 w-full rounded-full bg-bg-hover overflow-hidden">
+                    {/* Page Experience Bar - Mobile Only */}
+                    <div 
+                      className="absolute inset-y-0 left-0 bg-pass transition-all duration-500" 
+                      style={{ width: `${(auditData.speed.mobile?.perf_score || auditData.speed.perf_score || 0)}%` }} 
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 pb-2 border-b border-border-subtle">
+                    <div className="text-[10px] font-bold text-text-muted uppercase">Core Vitals (Mobile)</div>
+                    <div className="text-[10px] font-bold text-text-muted uppercase text-right">Value</div>
+                  </div>
+
+                  <div className="flex justify-between items-start py-1">
+                    <div className="flex flex-col gap-0.5">
+                       <span className="text-text-main text-xs font-semibold uppercase">FCP</span>
+                       <span className="text-text-muted text-[11px]">First Contentful Paint</span>
+                    </div>
+                    <span className="text-xs font-extrabold text-text-main shrink-0">
+                      {auditData.speed.mobile?.fcp || auditData.speed.metrics?.fcp}
                     </span>
                   </div>
-                  <div className="flex justify-between py-2 border-b border-border-subtle">
-                    <span className="text-text-muted text-sm">LCP</span>
-                    <span className="text-sm font-bold">
-                      {auditData.speed.metrics?.lcp}
+
+                  <div className="flex justify-between items-start py-1">
+                    <div className="flex flex-col gap-0.5">
+                       <span className="text-text-main text-xs font-semibold uppercase">LCP</span>
+                       <span className="text-text-muted text-[11px]">Largest Contentful Paint</span>
+                    </div>
+                    <span className="text-xs font-extrabold text-text-main shrink-0">
+                      {auditData.speed.mobile?.lcp || auditData.speed.metrics?.lcp}
                     </span>
                   </div>
-                  <div className="flex justify-between py-2 border-b border-border-subtle">
-                    <span className="text-text-muted text-sm">CLS</span>
-                    <span className="text-sm font-bold">
-                      {auditData.speed.metrics?.cls}
+
+                  <div className="flex justify-between items-start py-1">
+                    <div className="flex flex-col gap-0.5">
+                       <span className="text-text-main text-xs font-semibold uppercase">CLS</span>
+                       <span className="text-text-muted text-[11px]">Cumulative Layout Shift</span>
+                    </div>
+                    <span className="text-xs font-extrabold text-text-main shrink-0">
+                      {auditData.speed.mobile?.cls || auditData.speed.metrics?.cls}
                     </span>
                   </div>
                 </div>
                 <div className="flex gap-3">
-                  <button
-                    onClick={() => setViewingDetails("speed")}
-                    className="flex-1 bg-bg-hover border border-border-subtle py-2 rounded-lg text-sm font-medium"
+                  <a
+                    href={`${API_URL}/reports/${auditData.id}_speed.html`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 bg-bg-hover border border-border-subtle py-2 rounded-lg text-sm font-medium text-center hover:bg-bg-card transition-colors flex items-center justify-center gap-2"
                   >
-                    Metric Breakdown
-                  </button>
+                    Metric Breakdown <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
                   <a
                     href={`${API_URL}/reports/${auditData.id}_speed.pdf`}
-                    className="p-2 border border-border-subtle rounded-lg"
+                    className="p-2 border border-border-subtle rounded-lg text-text-muted hover:text-accent hover:border-accent transition-colors"
                     title="Download PDF"
+                    target="_blank"
+                    rel="noopener noreferrer"
                   >
                     <Download className="w-4 h-4" />
                   </a>
@@ -392,6 +452,7 @@ export default function AnalyzePage({
           key="details-seo"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
           className="w-full"
         >
           <button
@@ -450,6 +511,7 @@ export default function AnalyzePage({
             key="details-speed"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             className="w-full"
           >
             <button
@@ -461,7 +523,7 @@ export default function AnalyzePage({
             <div className="flex items-center justify-between mb-8 pb-6 border-b border-border-subtle">
               <h2 className="text-2xl font-semibold">Performance Audit</h2>
               <div className="text-4xl font-bold text-pass">
-                {auditData.speed.perf_score || "N/A"}
+                {auditData.speed.mobile?.perf_score || auditData.speed.perf_score || "N/A"}
               </div>
             </div>
 
@@ -471,7 +533,7 @@ export default function AnalyzePage({
                   FCP
                 </div>
                 <div className="text-xl font-bold">
-                  {auditData.speed.metrics?.fcp || "N/A"}
+                  {auditData.speed.mobile?.fcp || auditData.speed.metrics?.fcp || "N/A"}
                 </div>
               </div>
               <div className="p-4 bg-bg-card border border-border-subtle rounded-xl text-center">
@@ -479,7 +541,7 @@ export default function AnalyzePage({
                   LCP
                 </div>
                 <div className="text-xl font-bold">
-                  {auditData.speed.metrics?.lcp || "N/A"}
+                  {auditData.speed.mobile?.lcp || auditData.speed.metrics?.lcp || "N/A"}
                 </div>
               </div>
               <div className="p-4 bg-bg-card border border-border-subtle rounded-xl text-center">
@@ -487,32 +549,13 @@ export default function AnalyzePage({
                   CLS
                 </div>
                 <div className="text-xl font-bold">
-                  {auditData.speed.metrics?.cls || "N/A"}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-4 mb-8">
-              <div className="p-4 bg-bg-card border border-border-subtle rounded-xl text-center">
-                <div className="text-xs text-text-muted uppercase font-bold mb-1">
-                  TBT
-                </div>
-                <div className="text-xl font-bold">
-                  {auditData.speed.metrics?.tbt || "N/A"}
-                </div>
-              </div>
-              <div className="p-4 bg-bg-card border border-border-subtle rounded-xl text-center">
-                <div className="text-xs text-text-muted uppercase font-bold mb-1">
-                  TTI
-                </div>
-                <div className="text-xl font-bold">
-                  {auditData.speed.metrics?.tti || "N/A"}
+                  {auditData.speed.mobile?.cls || auditData.speed.metrics?.cls || "N/A"}
                 </div>
               </div>
             </div>
 
             <div className="space-y-3">
-              {(auditData.speed.speed_tests || []).map((test: any) => (
+              {(auditData.speed.mobile?.speed_tests || auditData.speed.speed_tests || []).map((test: any) => (
                 <div
                   key={test.title}
                   className="flex items-start gap-4 p-5 bg-bg-card border border-border-subtle rounded-xl"

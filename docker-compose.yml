@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: seo_backend
     ports:
-      - "8000:8000"
+      - "8003:8003"
     env_file:
       - ./backend/.env
     environment:
@@ -22,7 +22,7 @@ services:
       dockerfile: Dockerfile
     container_name: seo_frontend
     ports:
-      - "3000:3000"
+      - "3003:3003"
     env_file:
       - ./frontend/.env
     environment:
